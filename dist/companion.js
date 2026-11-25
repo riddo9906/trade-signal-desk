@@ -1,0 +1,17 @@
+const el=id=>document.getElementById(id),gib=n=>(n/1024**3).toFixed(1)+' GiB';let busy=false;
+function node(tag,text,cls){const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;}
+function display(s){
+ el('connection').textContent='● Local API connected · read-only diagnostics';el('updated').textContent='Checked '+new Date(s.observedAt).toLocaleTimeString();
+ el('cpu').textContent=s.pc.cpuPercent===null?'Sampling':s.pc.cpuPercent+'%';el('cpu-bar').style.width=(s.pc.cpuPercent||0)+'%';el('cores').textContent=s.pc.cpuCores+' logical processors · system-wide';
+ el('ram').textContent=s.pc.memory.usedPercent+'%';el('ram-bar').style.width=s.pc.memory.usedPercent+'%';el('ram-detail').textContent=gib(s.pc.memory.freeBytes)+' free of '+gib(s.pc.memory.totalBytes);
+ el('disk').textContent=s.pc.disk?gib(s.pc.disk.freeBytes):'Unavailable';el('disk-bar').style.width=s.pc.disk?100-s.pc.disk.freePercent+'%':'0%';el('disk-detail').textContent=s.pc.disk?s.pc.disk.freePercent+'% free on workspace drive':'This platform did not expose disk metrics';
+ el('uptime').textContent=Math.floor(s.pc.uptimeSeconds/86400)+'d '+Math.floor(s.pc.uptimeSeconds/3600)%24+'h';
+ const ready=s.services.filter(x=>x.state==='ready').length;el('service-count').textContent=ready+' / '+s.services.length;el('summary').textContent=ready===s.services.length?'Niblit endpoints report ready.':'Some services need a closer look.';
+ el('service-list').replaceChildren();for(const svc of s.services){let row=node('div',undefined,'service'),info=node('div',undefined,'info');info.append(node('b',svc.name),node('p',svc.url+' · '+(svc.httpStatus?'HTTP '+svc.httpStatus+' · ':'')+svc.latencyMs+' ms'));row.append(node('span','◇','icon'),info,node('span',svc.state==='unreachable'?'NO RESPONSE':svc.state.toUpperCase(),'state '+svc.state));el('service-list').append(row);}
+ el('actions').replaceChildren();s.actions.forEach((a,i)=>{let row=node('div',undefined,'action'),detail=node('div');detail.append(node('b',a.title),node('p',a.detail));row.append(node('span',String(i+1).padStart(2,'0')),detail);el('actions').append(row)});
+ el('repo-list').replaceChildren();for(const repo of s.repositories){let d=node('div',undefined,'repo');d.append(node('b',repo.name),node('p',repo.branch||repo.state),node('span',repo.state==='available'?repo.changedTrackedFiles+' tracked changes · '+repo.revision:repo.state));el('repo-list').append(d)}
+ el('trading').replaceChildren();el('trading').append(node('p',s.trading.twelveConfigured?'All-market provider key is configured. Verify coverage for your symbols.':'Crypto connection available. Forex, gold and equity feeds need a server key.'));
+ for(const sub of s.trading.subscriptions)el('trading').append(node('p',sub.provider+' · '+sub.symbol+' · '+sub.interval+'m — '+(sub.error||'collected '+(sub.fetchedAt?new Date(sub.fetchedAt).toLocaleTimeString():'not yet'))));
+}
+async function refresh(){if(busy)return;busy=true;el('refresh').disabled=true;try{const r=await fetch('/api/companion',{signal:AbortSignal.timeout(12000)});if(!r.ok)throw Error();display(await r.json());}catch{el('connection').textContent='● Cannot reach the local server. Displayed measurements may be old.';el('updated').textContent='Start Signal Desk to reconnect';}finally{busy=false;el('refresh').disabled=false}}
+el('refresh').onclick=refresh;refresh();setInterval(()=>{if(!document.hidden)refresh()},15000);
